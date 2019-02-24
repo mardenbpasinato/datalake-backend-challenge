@@ -1,0 +1,17 @@
+# Logs
+*.log
+
+# Byte-compiled
+*.pyc
+
+# IDE files
+.idea/
+.vscode/
+
+# Test
+.pytest_cache/
+__pycache__/
+.coverage
+
+# Docker volumes
+part_1/data/
