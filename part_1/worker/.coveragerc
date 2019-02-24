@@ -1,0 +1,11 @@
+[run]
+branch = True
+data_file = .coverage
+source = ./
+omit = test_*
+    
+[report]
+fail_under = 0.900
+show_missing = True
+sort = Name
+omit = test_*

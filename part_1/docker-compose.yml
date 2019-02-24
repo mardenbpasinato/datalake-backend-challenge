@@ -1,0 +1,118 @@
+version: "3.6"
+
+services:
+  # Nginx will be used as load balancer
+  nginx:
+    container_name: nginx
+    hostname: nginx
+    image: nginx:latest
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+    ports:
+      - 8000:8000
+  
+  # Flask api that receives incoming requests
+  api:
+    # It will be scaled, therefore it cannot have a fixed container_name
+    hostname: api
+    build:
+      context: ./api
+    environment:
+      FLASK_APP: './src/app.py'
+      PORT: '9000'
+      HOST: '0.0.0.0'
+      CACHE_ENDPOINT: 'redis://redis:6379'
+      BROKER_ENDPOINT: 'amqp://rabbitmq:5672'
+      BROKER_QUEUE: 'insert_into_database'
+      CELERY_TASK: 'insert_into_database'
+      CACHE_TIME: '600'
+      DEBUG: 'True'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+      - ./api:/api
+    depends_on:
+      - redis
+      - rabbitmq
+    ports:
+      - 9000
+    command: honcho start
+
+  # Celery worker that inserts requests into database
+  worker:
+    container_name: worker
+    hostname: worker
+    build:
+      context: ./worker
+    environment:
+      BROKER_ENDPOINT: 'amqp://rabbitmq:5672'
+      QUEUE: 'insert_into_database'
+      DATABASE_ENDPOINT: 'mongodb://mongodb:27017/'
+      DATABASE_USER:
+      DATABASE_PASSWORD:
+      DATABASE: 'challenge'
+      COLLECTION: 'product'
+      LOG_LEVEL: 'DEBUG'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+      - ./worker:/worker
+    depends_on:
+      - rabbitmq
+      - mongodb
+    command: honcho start
+  
+  # Redis will be used as cache
+  redis:
+    container_name: redis
+    hostname: redis
+    image: redis:latest
+    ports:
+      - 6379
+  
+  # Tool for inspecting Redis
+  redis-commander:
+    container_name: rediscommander
+    hostname: rediscommander
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: 'redis'
+    depends_on:
+      - redis
+    ports:
+      - 8081:8081
+  
+  # RabbitMQ will be used as broker
+  rabbitmq:
+    container_name: rabbitmq
+    hostname: rabbitmq
+    image: rabbitmq:3.7.7-management
+    ports:
+      - 5672:5672 # Server
+      - 15672:15672 # Management GUI
+  
+  # MongoDB will be used as database
+  mongodb:
+    container_name: mongodb
+    hostname: mongodb
+    image: mongo:latest
+    volumes:
+      - mongodbdata:/data/db
+    ports:
+      - 27017
+
+  # Tool for inspecting MongoDB
+  nosqlclient:
+    container_name: nosqlclient
+    hostname: nosqlclient
+    image: mongoclient/mongoclient:latest
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_URL: 'mongodb://mongodb:27017/'
+    ports:
+      - 3000:3000
+
+volumes:
+  mongodbdata:
+    driver: local
