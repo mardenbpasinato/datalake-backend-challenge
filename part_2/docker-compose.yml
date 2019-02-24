@@ -1,0 +1,90 @@
+version: "3.6"
+
+services:
+  # Container with startup and consolidation scripts
+  scripts:
+    container_name: scripts
+    build:
+      context: ./scripts
+    environment:
+      BROKER_ENDPOINT: 'amqp://rabbitmq:5672'
+      BROKER_QUEUE: 'verify_image'
+      CELERY_TASK: 'verify_image'
+      SHARED_MEMORY_HOST: 'redis'
+      SHARED_MEMORY_PORT: '6379'
+      INPUT_PATH: '/scripts/data/input'
+      OUTPUT_PATH: '/scripts/data/output'
+      PROCESSED_PATH: '/scripts/data/processed'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+      - ./scripts:/scripts
+      - ./data:/scripts/data
+    stdin_open: true
+    tty: true
+    depends_on:
+      - rabbitmq
+      - redis
+  
+  # Celery worker that checks images
+  worker:
+    # It will be scaled, therefore it cannot have a fixed container_name
+    hostname: worker
+    build:
+      context: ./worker
+    environment:
+      BROKER_ENDPOINT: 'amqp://rabbitmq:5672'
+      QUEUE: 'verify_image'
+      SHARED_MEMORY_HOST: 'redis'
+      SHARED_MEMORY_PORT: '6379'
+      IMAGE_SERVER: 'http://mock/images/'
+      LOG_LEVEL: 'DEBUG'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+      - ./worker:/worker
+    depends_on:
+      - rabbitmq
+      - redis
+    command: honcho start
+  
+  # Mock for image service 
+  mock:
+    container_name: mock
+    hostname: mock
+    build:
+      context: ./mock
+    environment:
+      PORT: '80'
+    volumes:
+      - ./mock/:/mock
+    ports:
+      - 80
+    command: ruby url-aggregator-api.rb
+  
+  # Redis will be used as shared memory
+  redis:
+    container_name: redis
+    hostname: redis
+    image: redis:latest
+    ports:
+      - 6379
+  
+  # Tool for inspecting Redis
+  redis-commander:
+    container_name: rediscommander
+    hostname: rediscommander
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: 'redis'
+    depends_on:
+      - redis
+    ports:
+      - 8081:8081
+
+  # RabbitMQ will be used as broker
+  rabbitmq:
+    container_name: rabbitmq
+    hostname: rabbitmq
+    image: rabbitmq:3.7.7-management
+    ports:
+      - 5672:5672 # Server
+      - 15672:15672 # Management GUI

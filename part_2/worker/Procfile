@@ -1,0 +1,1 @@
+worker: celery -A src.app worker -Q $QUEUE --loglevel=$LOG_LEVEL
